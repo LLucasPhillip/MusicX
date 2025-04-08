@@ -7,6 +7,7 @@ from tkinter import messagebox, filedialog
 from PIL import Image, ImageTk
 from pygame import mixer
 import yt_dlp
+import subprocess
 
 mixer.init()
 
@@ -48,7 +49,6 @@ songs_list.pack(side=LEFT, fill=BOTH, expand=True)
 url_entry = Entry(root, font=('Courier', 12), width=50)
 url_entry.place(relx=0.1, rely=0.6)
 
-# Arquivo temporário
 temp_file_path = None
 
 def baixar_youtube_para_mp3(url):
@@ -64,10 +64,8 @@ def baixar_youtube_para_mp3(url):
                 'preferredquality': '192',
             }],
         }
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-
         return saida
     except Exception as e:
         messagebox.showerror("Download Error", f"Erro ao baixar do YouTube:\n{e}")
@@ -79,19 +77,32 @@ def add_url():
         songs_list.insert(END, url)
         url_entry.delete(0, END)
 
-# ✅ NOVA FUNÇÃO: Adicionar arquivos locais
 def add_file():
-    filepaths = filedialog.askopenfilenames(title="Escolha músicas", filetypes=[("MP3 Files", "*.mp3")])
+    filepaths = filedialog.askopenfilenames(
+        title="Escolha músicas",
+        filetypes=[("Arquivos de áudio", "*.mp3 *.mp4")]
+    )
     for path in filepaths:
         if path not in songs_list.get(0, END):
             songs_list.insert(END, path)
+
+def extrair_audio_mp4(path_mp4):
+    try:
+        output = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+        subprocess.run([
+            'ffmpeg', '-i', path_mp4,
+            '-vn', '-acodec', 'libmp3lame', '-ab', '192k', '-y',
+            output
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return output
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao extrair áudio do .mp4:\n{e}")
+        return None
 
 def play_song():
     global temp_file_path
     try:
         selected_song = songs_list.get(ACTIVE)
-
-        # Parar música anterior e limpar arquivo temporário
         stop_song()
 
         if selected_song.startswith('http'):
@@ -101,6 +112,14 @@ def play_song():
                 return
             temp_file_path = path
             mixer.music.load(temp_file_path)
+
+        elif selected_song.endswith('.mp4'):
+            audio_path = extrair_audio_mp4(selected_song)
+            if not audio_path:
+                return
+            temp_file_path = audio_path
+            mixer.music.load(temp_file_path)
+
         else:
             mixer.music.load(selected_song)
 
@@ -154,10 +173,8 @@ def update_progress_bar():
 progress_bar = Scale(root, from_=0, to=100, orient=HORIZONTAL, length=500, **button_style)
 progress_bar.place(relx=0.15, rely=0.85)
 
-# Botões
 Button(root, text="➕ URL", command=add_url, **button_style).place(relx=0.8, rely=0.595, width=80, height=30)
 Button(root, text="📁 Arquivo", command=add_file, **button_style).place(relx=0.65, rely=0.595, width=100, height=30)
-
 Button(root, text=" ▶ Play ", command=play_song, **button_style).place(relx=0.25, rely=0.75, width=80, height=40)
 Button(root, text=" ⏸ Pause ", command=pause_song, **button_style).place(relx=0.4, rely=0.75, width=80, height=40)
 Button(root, text=" ▶ Resume ", command=resume_song, **button_style).place(relx=0.55, rely=0.75, width=80, height=40)
