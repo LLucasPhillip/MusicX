@@ -3,12 +3,10 @@ import threading
 import time
 import tempfile
 from tkinter import *
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 from PIL import Image, ImageTk
 from pygame import mixer
-import requests
 import yt_dlp
-from moviepy.editor import AudioFileClip, VideoFileClip
 
 mixer.init()
 
@@ -81,18 +79,12 @@ def add_url():
         songs_list.insert(END, url)
         url_entry.delete(0, END)
 
-def converter_mp4_para_mp3(caminho_mp4):
-    try:
-        caminho_mp3 = caminho_mp4.replace(".mp4", ".mp3")
-        if not os.path.exists(caminho_mp3):
-            video = VideoFileClip(caminho_mp4)
-            audio = video.audio
-            audio.write_audiofile(caminho_mp3)
-            video.close()
-        return caminho_mp3
-    except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao converter vídeo:\n{e}")
-        return None
+# ✅ NOVA FUNÇÃO: Adicionar arquivos locais
+def add_file():
+    filepaths = filedialog.askopenfilenames(title="Escolha músicas", filetypes=[("MP3 Files", "*.mp3")])
+    for path in filepaths:
+        if path not in songs_list.get(0, END):
+            songs_list.insert(END, path)
 
 def play_song():
     global temp_file_path
@@ -110,14 +102,7 @@ def play_song():
             temp_file_path = path
             mixer.music.load(temp_file_path)
         else:
-            if selected_song.endswith(".mp4"):
-                caminho_convertido = converter_mp4_para_mp3(selected_song)
-                if caminho_convertido:
-                    mixer.music.load(caminho_convertido)
-                else:
-                    return
-            else:
-                mixer.music.load(selected_song)
+            mixer.music.load(selected_song)
 
         mixer.music.play()
         update_progress_bar()
@@ -171,25 +156,14 @@ progress_bar.place(relx=0.15, rely=0.85)
 
 # Botões
 Button(root, text="➕ URL", command=add_url, **button_style).place(relx=0.8, rely=0.595, width=80, height=30)
+Button(root, text="📁 Arquivo", command=add_file, **button_style).place(relx=0.65, rely=0.595, width=100, height=30)
+
 Button(root, text=" ▶ Play ", command=play_song, **button_style).place(relx=0.25, rely=0.75, width=80, height=40)
 Button(root, text=" ⏸ Pause ", command=pause_song, **button_style).place(relx=0.4, rely=0.75, width=80, height=40)
 Button(root, text=" ▶ Resume ", command=resume_song, **button_style).place(relx=0.55, rely=0.75, width=80, height=40)
 Button(root, text=" ⏹ Stop ", command=stop_song, **button_style).place(relx=0.7, rely=0.75, width=80, height=40)
 Button(root, text=" ⏮ Prev ", command=prev_song, **button_style).place(relx=0.1, rely=0.75, width=80, height=40)
 Button(root, text=" ⏭ Next ", command=next_song, **button_style).place(relx=0.85, rely=0.75, width=80, height=40)
-
-# Carrega músicas da pasta local "music"
-def carregar_musicas_da_pasta():
-    pasta_music = "music"
-    if not os.path.exists(pasta_music):
-        os.makedirs(pasta_music)
-    for arquivo in os.listdir(pasta_music):
-        if arquivo.endswith(".mp3") or arquivo.endswith(".mp4"):
-            caminho_completo = os.path.join(pasta_music, arquivo)
-            if caminho_completo not in songs_list.get(0, END):
-                songs_list.insert(END, caminho_completo)
-
-carregar_musicas_da_pasta()
 
 root.protocol("WM_DELETE_WINDOW", lambda: (stop_song(), root.destroy()))
 root.mainloop()
