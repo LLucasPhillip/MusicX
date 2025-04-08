@@ -1,5 +1,5 @@
-pillow==10.4.0
+Pillow==10.4.0
 pygame==2.5.2
-tk==0.1.0
-yt-dlp
-requests
+requests>=2.0.0
+yt-dlp>=2024.1.1
+
