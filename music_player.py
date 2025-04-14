@@ -2,12 +2,12 @@ import os
 import threading
 import time
 import tempfile
+import subprocess
 from tkinter import *
 from tkinter import messagebox, filedialog
-from PIL import Image, ImageTk
 from pygame import mixer
+from PIL import Image, ImageTk  
 import yt_dlp
-import subprocess
 
 mixer.init()
 
@@ -16,8 +16,7 @@ root.title('Music Player App')
 root.geometry('700x500')
 root.resizable(False, False)
 
-# Fundo
-bg_image = Image.open("bg.jpeg")
+bg_image = Image.open("bg.jpeg")  
 bg_image = bg_image.resize((700, 500), Image.LANCZOS)
 bg_photo = ImageTk.PhotoImage(bg_image)
 
@@ -73,8 +72,10 @@ def baixar_youtube_para_mp3(url):
 
 def add_url():
     url = url_entry.get()
-    if url and url not in songs_list.get(0, END):
-        songs_list.insert(END, url)
+    if url:
+        path = baixar_youtube_para_mp3(url)
+        if path:
+            songs_list.insert(END, path)
         url_entry.delete(0, END)
 
 def add_file():
@@ -83,7 +84,9 @@ def add_file():
         filetypes=[("Arquivos de áudio", "*.mp3 *.mp4")]
     )
     for path in filepaths:
-        if path not in songs_list.get(0, END):
+        if path.endswith(".mp4"):
+            path = extrair_audio_mp4(path)
+        if path:
             songs_list.insert(END, path)
 
 def extrair_audio_mp4(path_mp4):
@@ -102,28 +105,13 @@ def extrair_audio_mp4(path_mp4):
 def play_song():
     global temp_file_path
     try:
-        selected_song = songs_list.get(ACTIVE)
-        stop_song()
-
-        if selected_song.startswith('http'):
-            messagebox.showinfo("Baixando", "Baixando música do YouTube, aguarde...")
-            path = baixar_youtube_para_mp3(selected_song)
-            if not path:
-                return
-            temp_file_path = path
-            mixer.music.load(temp_file_path)
-
-        elif selected_song.endswith('.mp4'):
-            audio_path = extrair_audio_mp4(selected_song)
-            if not audio_path:
-                return
-            temp_file_path = audio_path
-            mixer.music.load(temp_file_path)
-
-        else:
-            mixer.music.load(selected_song)
-
+        selected = songs_list.curselection()
+        if not selected:
+            return
+        path = songs_list.get(selected[0])
+        mixer.music.load(path)
         mixer.music.play()
+        temp_file_path = path
         update_progress_bar()
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao tocar a música:\n{e}")
@@ -138,27 +126,29 @@ def stop_song():
     global temp_file_path
     mixer.music.stop()
     progress_bar.set(0)
-    if temp_file_path and os.path.exists(temp_file_path):
+    if temp_file_path and os.path.exists(temp_file_path) and "temp" in temp_file_path:
         os.remove(temp_file_path)
         temp_file_path = None
 
 def next_song():
     try:
         next_index = songs_list.curselection()[0] + 1
-        songs_list.selection_clear(0, END)
-        songs_list.selection_set(next_index)
-        songs_list.activate(next_index)
-        play_song()
+        if next_index < songs_list.size():
+            songs_list.selection_clear(0, END)
+            songs_list.selection_set(next_index)
+            songs_list.activate(next_index)
+            play_song()
     except IndexError:
         messagebox.showinfo("Fim", "Não há mais músicas na lista.")
 
 def prev_song():
     try:
         prev_index = songs_list.curselection()[0] - 1
-        songs_list.selection_clear(0, END)
-        songs_list.selection_set(prev_index)
-        songs_list.activate(prev_index)
-        play_song()
+        if prev_index >= 0:
+            songs_list.selection_clear(0, END)
+            songs_list.selection_set(prev_index)
+            songs_list.activate(prev_index)
+            play_song()
     except IndexError:
         messagebox.showinfo("Início", "Essa é a primeira música.")
 
@@ -175,12 +165,15 @@ progress_bar.place(relx=0.15, rely=0.85)
 
 Button(root, text="➕ URL", command=add_url, **button_style).place(relx=0.8, rely=0.595, width=80, height=30)
 Button(root, text="📁 Arquivo", command=add_file, **button_style).place(relx=0.65, rely=0.595, width=100, height=30)
-Button(root, text=" ▶ Play ", command=play_song, **button_style).place(relx=0.25, rely=0.75, width=80, height=40)
-Button(root, text=" ⏸ Pause ", command=pause_song, **button_style).place(relx=0.4, rely=0.75, width=80, height=40)
-Button(root, text=" ▶ Resume ", command=resume_song, **button_style).place(relx=0.55, rely=0.75, width=80, height=40)
-Button(root, text=" ⏹ Stop ", command=stop_song, **button_style).place(relx=0.7, rely=0.75, width=80, height=40)
-Button(root, text=" ⏮ Prev ", command=prev_song, **button_style).place(relx=0.1, rely=0.75, width=80, height=40)
-Button(root, text=" ⏭ Next ", command=next_song, **button_style).place(relx=0.85, rely=0.75, width=80, height=40)
+Button(root, text="▶️", command=play_song, **button_style).place(relx=0.25, rely=0.75, width=80, height=40)
+Button(root, text="⏸", command=pause_song, **button_style).place(relx=0.4, rely=0.75, width=80, height=40)
+Button(root, text="⏹", command=stop_song, **button_style).place(relx=0.7, rely=0.75, width=80, height=40)
+Button(root, text="⏮", command=prev_song, **button_style).place(relx=0.1, rely=0.75, width=80, height=40)
+Button(root, text="⏭", command=next_song, **button_style).place(relx=0.85, rely=0.75, width=80, height=40)
 
-root.protocol("WM_DELETE_WINDOW", lambda: (stop_song(), root.destroy()))
+def fechar_app():
+    stop_song()
+    root.destroy()
+
+root.protocol("WM_DELETE_WINDOW", fechar_app)
 root.mainloop()
