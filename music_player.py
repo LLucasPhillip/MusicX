@@ -2,21 +2,22 @@ import os
 import threading
 import time
 import tempfile
-import subprocess
+import requests
 from tkinter import *
-from tkinter import messagebox, filedialog
+from tkinter import messagebox
 from pygame import mixer
-from PIL import Image, ImageTk  
-import yt_dlp
+from PIL import Image, ImageTk
 
+# Inicializar mixer
 mixer.init()
 
+# Interface principal
 root = Tk()
 root.title('Music Player App')
 root.geometry('700x500')
 root.resizable(False, False)
 
-bg_image = Image.open("bg.jpeg")  
+bg_image = Image.open("bg.jpeg")
 bg_image = bg_image.resize((700, 500), Image.LANCZOS)
 bg_photo = ImageTk.PhotoImage(bg_image)
 
@@ -24,13 +25,19 @@ canvas = Canvas(root, width=700, height=500)
 canvas.pack(fill="both", expand=True)
 canvas.create_image(0, 0, image=bg_photo, anchor="nw")
 
+# Estilos mais sutis
 button_style = {
-    'bg': '#282c34',
-    'fg': '#61dafb',
-    'font': ('Courier', 12, 'bold'),
-    'relief': RAISED,
-    'bd': 3
+    'bg': '#3b3f4a',          # fundo escuro porém suave
+    'fg': '#a9b1d6',          # texto em tom claro e frio
+    'font': ('Courier', 11),  # fonte menor e simples
+    'relief': FLAT,           # sem borda levantada
+    'bd': 0,
+    'activebackground': '#5c6270',  # fundo quando hover/click
+    'activeforeground': '#d0d4e8',  # texto quando hover/click
+    'highlightthickness': 0,
+    'cursor': 'hand2'
 }
+
 listbox_style = {
     'bg': '#1C1C1C',
     'fg': 'green',
@@ -48,59 +55,81 @@ songs_list.pack(side=LEFT, fill=BOTH, expand=True)
 url_entry = Entry(root, font=('Courier', 12), width=50)
 url_entry.place(relx=0.1, rely=0.6)
 
+search_entry = Entry(root, font=('Courier', 12), width=30)
+search_entry.place(relx=0.1, rely=0.05)
+
 temp_file_path = None
+deezer_results = []  # Armazena URLs de preview da Deezer
 
-def baixar_youtube_para_mp3(url):
+def search_deezer():
+    query = search_entry.get()
+    if not query:
+        messagebox.showwarning("Busca vazia", "Digite o nome de uma música.")
+        return
+
+    url = f"https://api.deezer.com/search?q={query}"
     try:
-        saida = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3').name
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': saida,
-            'quiet': True,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        return saida
+        response = requests.get(url)
+        data = response.json()
+
+        if 'data' not in data or not data['data']:
+            messagebox.showinfo("Nada encontrado", "Nenhuma música encontrada.")
+            return
+
+        songs_list.delete(0, END)
+        deezer_results.clear()
+
+        for track in data['data']:
+            title = f"{track['artist']['name']} - {track['title']}"
+            songs_list.insert(END, title)
+            deezer_results.append(track['preview'])
+
     except Exception as e:
-        messagebox.showerror("Download Error", f"Erro ao baixar do YouTube:\n{e}")
-        return None
+        messagebox.showerror("Erro", f"Erro ao buscar músicas:\n{e}")
 
-def add_url():
-    url = url_entry.get()
-    if url:
-        path = baixar_youtube_para_mp3(url)
-        if path:
-            songs_list.insert(END, path)
-        url_entry.delete(0, END)
-
-def add_file():
-    filepaths = filedialog.askopenfilenames(
-        title="Escolha músicas",
-        filetypes=[("Arquivos de áudio", "*.mp3 *.mp4")]
-    )
-    for path in filepaths:
-        if path.endswith(".mp4"):
-            path = extrair_audio_mp4(path)
-        if path:
-            songs_list.insert(END, path)
-
-def extrair_audio_mp4(path_mp4):
+def play_url_audio(url):
+    global temp_file_path
     try:
-        output = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
-        subprocess.run([
-            'ffmpeg', '-i', path_mp4,
-            '-vn', '-acodec', 'libmp3lame', '-ab', '192k', '-y',
-            output
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return output
+        temp_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+        with requests.get(url, stream=True) as r:
+            with open(temp_file_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        mixer.music.load(temp_file_path)
+        mixer.music.play()
+        update_progress_bar()
     except Exception as e:
-        messagebox.showerror("Erro", f"Erro ao extrair áudio do .mp4:\n{e}")
-        return None
+        messagebox.showerror("Erro", f"Erro ao tocar a música:\n{e}")
+
+def search_and_play_deezer():
+    query = search_entry.get()
+    if not query:
+        messagebox.showwarning("Busca vazia", "Digite o nome de uma música.")
+        return
+
+    url = f"https://api.deezer.com/search?q={query}"
+    try:
+        response = requests.get(url)
+        data = response.json()
+
+        if 'data' not in data or not data['data']:
+            messagebox.showinfo("Nada encontrado", "Nenhuma música encontrada.")
+            return
+
+        songs_list.delete(0, END)
+        deezer_results.clear()
+
+        for track in data['data']:
+            title = f"{track['artist']['name']} - {track['title']}"
+            songs_list.insert(END, title)
+            deezer_results.append(track['preview'])
+
+        # Toca a primeira música direto
+        first_preview_url = data['data'][0]['preview']
+        play_url_audio(first_preview_url)
+
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao buscar músicas:\n{e}")
 
 def play_song():
     global temp_file_path
@@ -108,10 +137,21 @@ def play_song():
         selected = songs_list.curselection()
         if not selected:
             return
-        path = songs_list.get(selected[0])
+        index = selected[0]
+        url = deezer_results[index]
+
+        if url.startswith("http"):
+            temp_file_path = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3").name
+            with requests.get(url, stream=True) as r:
+                with open(temp_file_path, 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            path = temp_file_path
+        else:
+            path = url
+
         mixer.music.load(path)
         mixer.music.play()
-        temp_file_path = path
         update_progress_bar()
     except Exception as e:
         messagebox.showerror("Erro", f"Erro ao tocar a música:\n{e}")
@@ -126,7 +166,7 @@ def stop_song():
     global temp_file_path
     mixer.music.stop()
     progress_bar.set(0)
-    if temp_file_path and os.path.exists(temp_file_path) and "temp" in temp_file_path:
+    if temp_file_path and os.path.exists(temp_file_path):
         os.remove(temp_file_path)
         temp_file_path = None
 
@@ -160,11 +200,19 @@ def update_progress_bar():
             progress_bar.set(current_time)
     threading.Thread(target=progress_thread, daemon=True).start()
 
-progress_bar = Scale(root, from_=0, to=100, orient=HORIZONTAL, length=500, **button_style)
+progress_bar = Scale(
+    root, from_=0, to=30, orient=HORIZONTAL, length=500,
+    bg="#282c34",
+    fg="#61dafb",
+    troughcolor="#44475a",
+    highlightthickness=0,
+    sliderlength=15,
+    showvalue=0,
+)
 progress_bar.place(relx=0.15, rely=0.85)
 
-Button(root, text="➕ URL", command=add_url, **button_style).place(relx=0.8, rely=0.595, width=80, height=30)
-Button(root, text="📁 Arquivo", command=add_file, **button_style).place(relx=0.65, rely=0.595, width=100, height=30)
+Button(root, text="🔍 Buscar", command=search_deezer, **button_style).place(relx=0.7, rely=0.045, width=100, height=30)
+Button(root, text="🔍 Buscar e Tocar", command=search_and_play_deezer, **button_style).place(relx=0.8, rely=0.045, width=150, height=30)
 Button(root, text="▶️", command=play_song, **button_style).place(relx=0.25, rely=0.75, width=80, height=40)
 Button(root, text="⏸", command=pause_song, **button_style).place(relx=0.4, rely=0.75, width=80, height=40)
 Button(root, text="⏹", command=stop_song, **button_style).place(relx=0.7, rely=0.75, width=80, height=40)
