@@ -8,12 +8,13 @@ from tkinter import messagebox
 from PIL import Image, ImageTk
 from pygame import mixer
 from io import BytesIO
+import webbrowser
 
 mixer.init()
 
 root = Tk()
 root.title('Music Player - Spotify Style')
-root.geometry('800x550')
+root.geometry('800x650')  # aumentei altura p/ banner
 root.resizable(False, False)
 root.configure(bg="#121212")
 
@@ -43,6 +44,7 @@ deezer_covers = []
 playlist_songs = []
 playlist_covers = []
 
+# ------------------- FUNÇÕES DE PLAYER -------------------
 def search_deezer():
     query = search_entry.get().strip()
     if not query:
@@ -234,7 +236,7 @@ def fechar_app():
     stop_song()
     root.destroy()
 
-
+# ------------------- INTERFACE -------------------
 root.grid_columnconfigure(0, weight=3)
 root.grid_columnconfigure(1, weight=0)
 root.grid_columnconfigure(2, weight=3)
@@ -306,6 +308,38 @@ Button(button_frame, text="⏸", command=pause_song, **button_style).pack(side=L
 Button(button_frame, text="⏹", command=stop_song, **button_style).pack(side=LEFT, padx=12)
 Button(button_frame, text="⏭", command=next_song, **button_style).pack(side=LEFT, padx=12)
 
-root.protocol("WM_DELETE_WINDOW", fechar_app)
+# ------------------- ANÚNCIOS ROTATIVOS -------------------
+ads_data = [
+    {"img": "https://dummyimage.com/600x100/1db954/ffffff&text=Promoção+de+Fones", "url": "https://www.exemplo.com/fones"},
+    {"img": "https://dummyimage.com/600x100/ff4757/ffffff&text=Baixe+nosso+App", "url": "https://www.exemplo.com/app"},
+    {"img": "https://dummyimage.com/600x100/3742fa/ffffff&text=Curso+de+Python+com+Desconto", "url": "https://www.exemplo.com/python"}
+]
 
+ad_index = 0
+ad_label = Label(root, bg="#121212", cursor="hand2")
+ad_label.grid(row=4, column=0, columnspan=4, pady=(0,15))
+
+def trocar_anuncio():
+    global ad_index
+    ad = ads_data[ad_index]
+
+    try:
+        response = requests.get(ad["img"])
+        img_data = response.content
+        img = Image.open(BytesIO(img_data))
+        img.thumbnail((600, 100), Image.LANCZOS)
+        img_tk = ImageTk.PhotoImage(img)
+        ad_label.image = img_tk
+        ad_label.config(image=img_tk)
+
+        ad_label.bind("<Button-1>", lambda e, url=ad["url"]: webbrowser.open(url))
+    except Exception as e:
+        ad_label.config(text="Erro ao carregar anúncio", fg="red")
+
+    ad_index = (ad_index + 1) % len(ads_data)
+    root.after(10000, trocar_anuncio)  # troca a cada 10 segundos
+
+trocar_anuncio()
+
+root.protocol("WM_DELETE_WINDOW", fechar_app)
 root.mainloop()
